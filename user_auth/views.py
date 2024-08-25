@@ -3,10 +3,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import CustomUser
 from .serializers import CustomUserSerializer
 
-class RegisterView(generics.CreateAPIView):
+class RegisterView(generics.ListCreateAPIView):
     serializer_class = CustomUserSerializer
+    queryset = CustomUser.objects.filter(is_staff=False)
 
-
+    def get_queryset(self):
+        return CustomUser.objects.filter(is_staff=False).exclude(id=self.request.user.id)
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request: views.Request, *args, **kwargs) -> views.Response:
         print("in login response", request.user, args, kwargs,request.data)
@@ -23,3 +25,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         except Exception as e:
             print(e, 'exeption')
             return response.Response(data=str(e),status=status.HTTP_404_NOT_FOUND)
+        
+
+    
