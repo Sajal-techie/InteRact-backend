@@ -21,27 +21,40 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data=None):
         data = json.loads(text_data)
-        message = data['message']
-        receiver_id = data['receiver']
-        sender_id = data["sender"]
+        if data.get('type') == 'video-call-invite':
+            print(f"Received video call invite: {data}")
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'video_call_invite',
+                    'roomId': data['roomId'],
+                    'sender': data['sender'],
+                    'receiver': data['receiver'],
+                    'message': data['message'],
+                }
+            )
+        else:
+            message = data['message']
+            receiver_id = data['receiver']
+            sender_id = data["sender"]
 
-        sender =  await self.get_user(sender_id)
-        receiver = await self.get_user(receiver_id)
-        if sender and receiver:
-            
-            chat = await self.save_message(message, sender, receiver, self.room_name)
+            sender =  await self.get_user(sender_id)
+            receiver = await self.get_user(receiver_id)
+            if sender and receiver:
+                
+                chat = await self.save_message(message, sender, receiver, self.room_name)
 
-            serialized_data =  await self.serialize_chat(chat)
-            print(serialized_data.get('sender'), 'se-=-=-=-=-=-=-=-=-=-=-=-=')
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': "chat_message",
-                "message": message,
-                "sender" : str(sender_id), 
-                "receiver": str(receiver_id)
-            }
-        )
+                serialized_data =  await self.serialize_chat(chat)
+                print(serialized_data.get('sender'), 'se-=-=-=-=-=-=-=-=-=-=-=-=')
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': "chat_message",
+                    "message": message,
+                    "sender" : str(sender_id), 
+                    "receiver": str(receiver_id)
+                }
+            )
     
     async def chat_message(self, event):
         message = event["message"]
@@ -52,6 +65,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'message': message,
             'sender':sender,
             'receiver':receiver
+        }))
+
+    async def video_call_invite(self, event):
+        print(f"Sending video call invite: {event}")
+        await self.send(text_data=json.dumps({
+            'type': 'video-call-invite',
+            'roomId': event['roomId'],
+            'sender': event['sender'],
+            'receiver': event['receiver'],
+            'message': event['message'],
         }))
 
     @database_sync_to_async
@@ -66,3 +89,41 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def serialize_chat(self, chat):
         return ChatSerializer(chat).data
+    
+
+class VideoCallConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.room_name = self.scope['url_route']['kwargs']['room_name']
+        self.room_group_name = f'video_{self.room_name}'
+        print(f'Video consumer connecting to room: {self.room_name}')
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+        await self.accept()
+        print(f'Video consumer connected to room: {self.room_name}')
+
+    async def disconnect(self, close_code):
+        print(f'Video consumer disconnecting from room: {self.room_name}')
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+
+    async def receive(self, text_data):
+        data = json.loads(text_data)
+        message_type = data['type']
+        print(f"Video consumer received message type: {message_type}")
+        if message_type in ['offer', 'answer', 'ice-candidate','ready']:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'signal',
+                    'message': data,
+                }
+            )
+
+    async def signal(self, event):
+        print(f"Video consumer signaling: {event['message']['type']}")
+        message = event['message']
+        await self.send(text_data=json.dumps(message))
