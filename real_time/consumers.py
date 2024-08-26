@@ -114,7 +114,7 @@ class VideoCallConsumer(AsyncWebsocketConsumer):
         data = json.loads(text_data)
         message_type = data['type']
         print(f"Video consumer received message type: {message_type}")
-        if message_type in ['offer', 'answer', 'ice-candidate','ready']:
+        if message_type in ['offer', 'answer', 'ice-candidate','ready', 'end-call']:
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -127,3 +127,40 @@ class VideoCallConsumer(AsyncWebsocketConsumer):
         print(f"Video consumer signaling: {event['message']['type']}")
         message = event['message']
         await self.send(text_data=json.dumps(message))
+
+
+class PresenceConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.user_id = self.scope['url_route']['kwargs']['user_id']
+        self.group_name = 'presence'
+        
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+        
+        await self.set_user_online(self.user_id)
+        await self.channel_layer.group_send(
+            self.group_name,
+            {"type": "user_online", "user_id": self.user_id}
+        )
+
+    async def disconnect(self, close_code):
+        await self.set_user_offline(self.user_id)
+        await self.channel_layer.group_send(
+            self.group_name,
+            {"type": "user_offline", "user_id": self.user_id}
+        )
+        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def user_online(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    async def user_offline(self, event):
+        await self.send(text_data=json.dumps(event))
+
+    @database_sync_to_async
+    def set_user_online(self, user_id):
+        CustomUser.objects.filter(id=user_id).update(is_online=True)
+
+    @database_sync_to_async
+    def set_user_offline(self, user_id):
+        CustomUser.objects.filter(id=user_id).update(is_online=False)
