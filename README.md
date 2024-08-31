@@ -7,10 +7,6 @@ Welcome to the **InteRact Backend** repository! This project is part of a full-s
 - [Features](#features)
 - [Architecture](#architecture)
 - [Installation](#installation)
-- [Usage](#usage)
-- [API Documentation](#api-documentation)
-- [Contributing](#contributing)
-- [License](#license)
 
 ## **Introduction**
 InteRact is a real-time communication platform that allows users to chat and make video calls. The backend handles user authentication, real-time messaging, and video call signaling, providing a robust and scalable infrastructure.
